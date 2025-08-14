@@ -24,8 +24,11 @@ DB_PORT = os.getenv('PORT')
 DB_USER = os.getenv('USER')
 DB_PASS = os.getenv('PASSWORD')
 
-# Build the MySQL URI from parts
-DB_URI = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# URL-encode the password to handle special characters
+encoded_password = quote_plus(DB_PASS)
+
+# Build the MySQL URI from parts with the encoded password
+DB_URI = f"mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -110,11 +113,17 @@ def create_and_email_otp(admin: AdminUser):
 with app.app_context():
     db.create_all()
     if AdminUser.query.count() == 0:
+        admin_password = os.getenv('ADMIN_PASSWORD')
+        if not admin_password:
+            # Handle the case where ADMIN_PASSWORD is not set
+            print("Warning: ADMIN_PASSWORD environment variable not set. A default password 'adminpass' will be used.")
+            admin_password = 'adminpass'
+            
         default_admin = AdminUser(
             username='admin',
             email=os.getenv('ADMIN_EMAIL', 'housedepot2@gmail.com'),
             full_name='Admin User',
-            password_hash=generate_password_hash(os.getenv('ADMIN_PASSWORD')),
+            password_hash=generate_password_hash(admin_password),
         )
         db.session.add(default_admin)
         db.session.commit()
