@@ -1,9 +1,9 @@
 # app.py — HouseDepot (separate MySQL params, no DATABASE_URL)
 from datetime import datetime, timedelta
 from decimal import Decimal
-import os, random, re
+import os, random
+import re
 from urllib.parse import quote_plus
-
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
@@ -18,17 +18,14 @@ app = Flask(__name__)
 # -------- Core config (NO DATABASE_URL) --------
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret')
 
-DB_NAME = os.getenv('DATABASE', 'housedepot')
-DB_HOST = os.getenv('HOST', '127.0.0.1')   # prefer TCP
-DB_PORT = os.getenv('PORT', '3306')
-DB_USER = os.getenv('USER', 'root')
-DB_PASS = os.getenv('PASSWORD', '')
+DB_NAME = os.getenv('DATABASE')
+DB_HOST = os.getenv('HOST')
+DB_PORT = os.getenv('PORT')
+DB_USER = os.getenv('USER')
+DB_PASS = os.getenv('PASSWORD')
 
-# Build the MySQL URI from parts (URL-encode user/pass for special chars)
-DB_URI = (
-    f"mysql+pymysql://{quote_plus(DB_USER)}:{quote_plus(DB_PASS)}"
-    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+# Build the MySQL URI from parts
+DB_URI = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -112,32 +109,15 @@ def create_and_email_otp(admin: AdminUser):
 # -------- First run: ensure tables and seed admin --------
 with app.app_context():
     db.create_all()
-
-    admin = AdminUser.query.filter_by(username='admin').first()
-    admin_email = os.getenv('ADMIN_EMAIL')
-    admin_password = os.getenv('ADMIN_PASSWORD')
-
-    if not admin:
-        if not admin_email or not admin_password:
-            raise ValueError("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env before first run.")
-        db.session.add(AdminUser(
+    if AdminUser.query.count() == 0:
+        default_admin = AdminUser(
             username='admin',
-            email=admin_email,
+            email=os.getenv('ADMIN_EMAIL', 'housedepot2@gmail.com'),
             full_name='Admin User',
-            password_hash=generate_password_hash(admin_password),
-        ))
+            password_hash=generate_password_hash(os.getenv('ADMIN_PASSWORD')),
+        )
+        db.session.add(default_admin)
         db.session.commit()
-        print("✅ Default admin created.")
-    else:
-        # Auto-repair an empty/malformed hash from earlier runs
-        bad = (not admin.password_hash) or (':' not in admin.password_hash)
-        if bad:
-            if not admin_password:
-                raise ValueError("ADMIN_PASSWORD must be set in .env to repair admin hash.")
-            admin.email = admin_email or admin.email
-            admin.password_hash = generate_password_hash(admin_password)
-            db.session.commit()
-            print("🔧 Fixed admin hash from .env")
 
 # -------- Routes --------
 @app.route('/')
@@ -167,12 +147,14 @@ def checkout():
         flash('Your cart is empty.', 'warning')
         return redirect(url_for('cart'))
 
+    # Fetch items in cart
     items = Product.query.filter(Product.id.in_(ids)).all()
     if not items:
         session.pop('cart', None)
         flash('Your cart is empty.', 'warning')
         return redirect(url_for('cart'))
 
+    # Build WhatsApp message with product list + total
     lines = ["Hello, I would like to place an order for the items in my cart:", ""]
     total = Decimal('0.00')
     for i, p in enumerate(items, start=1):
@@ -183,13 +165,17 @@ def checkout():
     lines.append(f"Total amount: ₹{total:.2f}")
     wa_text = "\n".join(lines)
 
+    # Encode and build WA URL
     wa_number = "916282526656"  # E.164 without plus sign
     wa_url = f"https://wa.me/{wa_number}?text={quote_plus(wa_text)}"
 
+    # Clear the cart and show success message
     session.pop('cart', None)
     flash('Order initiated. Opening WhatsApp…', 'success')
 
+    # Render a lightweight page that auto-opens WhatsApp
     return render_template('checkout_redirect.html', wa_url=wa_url)
+
 
 # ---- Admin auth + OTP ----
 @app.route('/login', methods=['GET', 'POST'])
@@ -198,18 +184,9 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         admin = AdminUser.query.filter_by(username=username).first()
-
-        ok = False
-        if admin:
-            try:
-                ok = check_password_hash(admin.password_hash, password)
-            except ValueError:
-                ok = False
-
-        if not admin or not ok:
+        if not admin or not check_password_hash(admin.password_hash, password):
             flash('Invalid username or password', 'danger')
             return render_template('login.html')
-
         create_and_email_otp(admin)
         session['pending_admin_id'] = admin.id
         flash('OTP sent to your email. Please verify.', 'info')
