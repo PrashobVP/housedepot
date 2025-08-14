@@ -194,7 +194,7 @@ def checkout():
 # ---- Admin auth + OTP ----
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST']:
+    if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         admin = AdminUser.query.filter_by(username=username).first()
@@ -223,7 +223,7 @@ def verify_otp():
         flash('Start by logging in.', 'warning')
         return redirect(url_for('login'))
 
-    if request.method == 'POST']:
+    if request.method == 'POST':
         code = request.form.get('code', '').strip()
         token = OtpToken.query.filter_by(
             admin_user_id=pending_id, code=code, used=False
@@ -280,7 +280,7 @@ def admin_dashboard():
 def add_product():
     if not require_admin():
         return redirect(url_for('login'))
-    if request.method == 'POST']:
+    if request.method == 'POST':
         name = request.form['name']
         price_raw = request.form['price']
         description = request.form.get('description')
@@ -307,7 +307,7 @@ def edit_product(pid):
     if not require_admin():
         return redirect(url_for('login'))
     p = Product.query.get_or_404(pid)
-    if request.method == 'POST']:
+    if request.method == 'POST':
         p.name = request.form['name']
         price_raw = request.form['price']
         try:
@@ -338,7 +338,7 @@ def delete_product(pid):
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
-    if request.method == 'POST']:
+    if request.method == 'POST':
         name = (request.form.get('name') or '').strip()
         email = (request.form.get('email') or '').strip()
         message = (request.form.get('message') or '').strip()
