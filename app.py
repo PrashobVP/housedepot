@@ -29,7 +29,7 @@ encoded_password = quote_plus(DB_PASS)
 
 # Build the MySQL URI from parts with the encoded password
 DB_URI = f"mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-print(f"Generated DB URI: {DB_URI}")
+#print(f"Generated DB URI: {DB_URI}")
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
