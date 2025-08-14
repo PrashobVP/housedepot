@@ -11,7 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
 # Load .env if present (optional).
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 
