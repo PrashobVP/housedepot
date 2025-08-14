@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<section class="py-5 text-center">
+  <h1 class="fw-bold mb-4">Contact Us</h1>
+  <p class="text-muted mb-5">
+    Have questions or need help? Fill out the form below and we’ll get back to you as soon as possible.
+  </p>
+
+  <div class="container" style="max-width: 700px;">
+    <form action="#" method="POST" class="text-start">
+      <div class="mb-3">
+        <label for="name" class="form-label">Full Name</label>
+        <input type="text" id="name" name="name" class="form-control" placeholder="Your name" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="email" class="form-label">Email Address</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="you@example.com" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="message" class="form-label">Message</label>
+        <textarea id="message" name="message" rows="5" class="form-control" placeholder="Write your message..." required></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary px-4">Send Message</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}

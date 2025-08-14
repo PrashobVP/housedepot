@@ -1,0 +1,59 @@
+/* ================================
+   HouseDepot Global Overrides
+   Purpose: kill circular product images everywhere in the product grid
+   ================================ */
+
+/* 2.1: The key selectors for product images */
+#productGrid img,
+#productGrid .product-img,
+#productGrid .card-img-top {
+  border-radius: 0 !important;
+  clip-path: none !important;
+  -webkit-clip-path: none !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* 2.2: Also neutralize rounded classes if added to containers */
+#productGrid .rounded,
+#productGrid .rounded-top,
+#productGrid .rounded-circle,
+#productGrid .ratio,
+#productGrid .ratio::before,
+#productGrid .product-thumb {
+  border-radius: 0 !important;
+  clip-path: none !important;
+  -webkit-clip-path: none !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+/* 2.3: If some theme applies circular radius via gigantic px values (e.g., 9999px) */
+#productGrid .card *,
+#productGrid .ratio *,
+#productGrid .product-card * {
+  /* Only reset the corner rounding; do not change overflow unless needed */
+  border-radius: 0 !important;
+}
+
+/* 2.4: Preferred thumbnail shape (square) using Bootstrap ratio */
+#productGrid .ratio-1x1 {
+  background-color: #f8f9fa;
+  overflow: hidden;
+}
+
+/* 2.5: Optional polish */
+.card.hover-up { transition: transform .2s ease, box-shadow .2s ease; }
+@media (min-width: 768px) {
+  .card.hover-up:hover { transform: translateY(-4px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important; }
+}
+
+/* 2.6: Clamp long descriptions */
+.line-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

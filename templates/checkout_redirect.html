@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="text-center py-5">
+    <h2 class="fw-bold mb-3">Order Initiated</h2>
+    <p class="text-muted mb-4">We’ve prepared your order message. If WhatsApp didn’t open, click the button below.</p>
+
+    <a href="{{ wa_url }}" target="_blank" rel="noopener" class="btn btn-success btn-lg">
+      Open WhatsApp
+    </a>
+
+    <div class="mt-4">
+      <a href="{{ url_for('index') }}" class="btn btn-link">Back to Home</a>
+    </div>
+  </div>
+
+  <script>
+    // Try to open WhatsApp automatically after a short delay
+    setTimeout(function () {
+      window.open("{{ wa_url }}", "_blank");
+    }, 400);
+  </script>
+{% endblock %}
