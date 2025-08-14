@@ -4,8 +4,6 @@ from decimal import Decimal
 import os, random
 import re
 from urllib.parse import quote_plus
-
-
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
@@ -20,11 +18,11 @@ app = Flask(__name__)
 # -------- Core config (NO DATABASE_URL) --------
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret')
 
-DB_NAME = os.getenv('DATABASE', 'housedepot')
-DB_HOST = os.getenv('HOST', 'localhost')
-DB_PORT = os.getenv('PORT', '3306')
-DB_USER = os.getenv('USER', 'root')
-DB_PASS = os.getenv('PASSWORD', '')
+DB_NAME = os.getenv('DATABASE')
+DB_HOST = os.getenv('HOST')
+DB_PORT = os.getenv('PORT')
+DB_USER = os.getenv('USER')
+DB_PASS = os.getenv('PASSWORD')
 
 # Build the MySQL URI from parts
 DB_URI = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
