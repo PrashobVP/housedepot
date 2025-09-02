@@ -57,3 +57,9 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* HD THEME */
+.object-fit-cover{object-fit:cover}
+.card{border-radius:1rem}
+.btn{border-radius:.75rem}
+.form-control,.form-select{border-radius:.75rem}

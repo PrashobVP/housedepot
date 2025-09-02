@@ -6,13 +6,15 @@
         <div class="card-body">
           <h4 class="mb-3">Verify OTP</h4>
           <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
               <label class="form-label">Enter 6-digit code</label>
               <input name="code" class="form-control" maxlength="6" required>
             </div>
             <button class="btn btn-primary w-100">Verify</button>
           </form>
-          <form method="post" action="{{ url_for('resend_otp') }}" class="mt-2">
+          <form method="post" action="{{ url_for('resend_otp') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-link">Resend code</button>
           </form>
         </div>

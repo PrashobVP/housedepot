@@ -1,232 +1,82 @@
 {% extends "layout.html" %}
 {% block content %}
-
-<!-- Hero with logo on the left, text on the right -->
-<div class="container py-4 py-md-5">
-  <div class="row align-items-center g-3">
-    <!-- Logo -->
-    <div class="col-4 col-md-2 text-center text-md-start">
-      <img src="{{ logo_url }}" alt="HouseDepot Logo" class="img-fluid" style="max-height:200px; width: 400px;;">
-    </div>
-    <!-- Heading + subheading -->
-    <div class="col-8 col-md-10">
-      <h1 class="fw-bold fst-italic display-6 mb-2 text-center" style="font-family: 'Playfair Display', serif;">
-        Discover Home Essentials
-      </h1>
-      <p class="text-muted mb-0 text-center" style="font-family: 'Playfair Display', serif;">Curated products for every room — beautifully organized and mobile-ready.</p>
-    </div>
-  </div>
-</div>
-
-<!-- Toolbar: search + sort + cart count -->
-<div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-2 gap-md-3 mb-4">
-  <div class="input-group">
-    <span class="input-group-text" aria-hidden="true">🔎</span>
-    <input id="quickSearch" type="search" class="form-control" placeholder="Search products…" aria-label="Search products">
-  </div>
-
-  <div class="ms-md-auto d-flex align-items-center gap-2">
-    <select id="sortSelect" class="form-select">
-      <option value="new">Sort: Newest</option>
-      <option value="priceLow">Price: Low → High</option>
-      <option value="priceHigh">Price: High → Low</option>
-      <option value="nameAz">Name: A → Z</option>
-      <option value="nameZa">Name: Z → A</option>
-    </select>
-
-    <!-- Cart button with live count from session -->
-    {% set cart_count = session.get('cart')|length if session.get('cart') else 0 %}
-    <a href="{{ url_for('cart') }}" class="btn btn-outline-secondary position-relative">
-      Cart
-      <span class="badge bg-danger position-absolute top-0 start-100 translate-middle rounded-pill">
-        {{ cart_count }}
-      </span>
-    </a>
-
-    <a class="btn btn-outline-secondary d-md-none" data-bs-toggle="collapse" href="#filters" role="button" aria-expanded="false">
-      Filters
-    </a>
-  </div>
-</div>
-
-<!-- (Optional) Filters placeholder -->
-<div class="collapse mb-3" id="filters">
-  <div class="card card-body">
-    <div class="row g-3">
-      <div class="col-6 col-md-3">
-        <label class="form-label small text-muted mb-1">Price min (₹)</label>
-        <input type="number" class="form-control" id="minPrice" placeholder="0">
-      </div>
-      <div class="col-6 col-md-3">
-        <label class="form-label small text-muted mb-1">Price max (₹)</label>
-        <input type="number" class="form-control" id="maxPrice" placeholder="5000">
-      </div>
-      <div class="col-12 col-md-3 d-flex align-items-end">
-        <button class="btn btn-primary w-100" id="applyFilters">Apply</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Product Grid -->
-<div id="productGrid" class="row g-4">
-  {% for p in products %}
-  <div class="col-12 col-sm-6 col-lg-4 product-card" data-name="{{ p.name|lower }}" data-price="{{ '%.2f'|format(p.price) }}">
-    <div class="card h-100 shadow-sm hover-up">
-      <!-- Image area (no badge) -->
-      <div class="ratio ratio-1x1 bg-light position-relative overflow-hidden product-thumb">
-        <img
-          src="/{{ p.image_url }}"
-          class="w-100 h-100 object-cover product-img"
-          alt="{{ p.name }}"
-          loading="lazy">
+<section class="hd-hero py-5">
+  <div class="container">
+    <div class="row align-items-center g-4">
+      <div class="col-lg-7">
+        <div class="hd-pill mb-3"><i class="bi bi-stars"></i><span>Mid-Season Sale · Up to 40% off</span></div>
+        <h1 class="fw-bold display-5">Make your home feel brand new</h1>
+        <p class="text-dark mb-4">Premium bedsheets, towels, and home linens. Thoughtfully made, fairly priced.</p>
+        <a href="#grid" class="btn hd-btn btn-lg"><i class="bi bi-bag me-1"></i> Shop now</a>
       </div>
 
-      <div class="card-body d-flex flex-column">
-        <h5 class="card-title mb-1 text-truncate" title="{{ p.name }}">{{ p.name }}</h5>
-        {% if p.description %}
-          <p class="card-text text-muted small line-clamp mb-2">{{ p.description }}</p>
-        {% else %}
-          <p class="card-text text-muted small mb-2">Premium quality for modern homes.</p>
-        {% endif %}
-
-        <div class="d-flex align-items-center justify-content-between mt-auto">
-          <span class="fs-5 fw-bold">₹{{ '%.2f'|format(p.price) }}</span>
-          <a class="btn btn-primary btn-sm px-3" href="{{ url_for('add_to_cart', product_id=p.id) }}">Add to Cart</a>
+      <!-- Right logo card: NO bottom line, prettier bg -->
+      <div class="col-lg-5">
+        <div class="ratio ratio-4x3 rounded-4 shadow-sm hero-logo-card">
+          <div class="hero-logo-inner"></div>
         </div>
       </div>
     </div>
   </div>
-  {% endfor %}
+</section>
 
-  {% if not products %}
-    <div class="col-12">
-      <div class="alert alert-info text-center mb-0">
-        No products yet. Admins can add items from the dashboard.
-      </div>
+<section class="py-5" id="grid">
+  <div class="container">
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-3 mb-3">
+      <h4 class="mb-0">Products</h4>
+      <form class="d-flex gap-2" method="get" action="{{ url_for('index') }}">
+        <input class="form-control" type="text" name="q" value="{{ request.args.get('q','') }}" placeholder="Search by name or ID…">
+        <select class="form-select" name="sort">
+          <option value="newest" {{ 'selected' if sort=='newest' else '' }}>Newest</option>
+          <option value="price-asc" {{ 'selected' if sort=='price-asc' else '' }}>Price: Low to High</option>
+          <option value="price-desc" {{ 'selected' if sort=='price-desc' else '' }}>Price: High to Low</option>
+        </select>
+        <button class="btn btn-dark"><i class="bi bi-sliders2"></i> Apply</button>
+      </form>
     </div>
-  {% endif %}
-</div>
 
-<!-- Social Media & WhatsApp Contact (below the grid) -->
-<div class="mt-5 text-center">
-  <h5 class="mb-3">Connect With Us</h5>
-  <div class="d-flex justify-content-center gap-3">
-    <!-- WhatsApp -->
-    <a href="https://wa.me/916282526656" target="_blank" rel="noopener" class="text-success social-icon" aria-label="WhatsApp">
-      <i class="bi bi-whatsapp"></i>
-    </a>
-    <!-- Facebook (replace with your real page) -->
-    <a href="https://facebook.com/" target="_blank" rel="noopener" class="text-primary social-icon" aria-label="Facebook">
-      <i class="bi bi-facebook"></i>
-    </a>
-    <!-- Instagram -->
-    <a href="https://instagram.com/" target="_blank" rel="noopener" class="text-danger social-icon" aria-label="Instagram">
-      <i class="bi bi-instagram"></i>
-    </a>
-    <!-- Twitter/X -->
-    <a href="https://twitter.com/" target="_blank" rel="noopener" class="text-info social-icon" aria-label="Twitter">
-      <i class="bi bi-twitter"></i>
-    </a>
+    {% if products %}
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+      {% for p in products %}
+      <div class="col">
+        <div class="card product-card border-0 shadow-sm h-100 position-relative">
+          <div class="product-badge">ID: {{ p.id }}</div>
+          <a href="{{ url_for('product_detail', pid=p.id) }}" class="text-decoration-none text-dark">
+            <img src="/{{ p.image_url }}" class="card-img-top" style="height:240px; object-fit:cover" alt="{{ p.name }}">
+          </a>
+          <div class="card-body d-flex flex-column">
+            <a href="{{ url_for('product_detail', pid=p.id) }}" class="text-decoration-none"><h6 class="card-title mb-1">{{ p.name }}</h6></a>
+            <div class="text-muted small flex-grow-1">{{ (p.description or '')[:90] }}{% if (p.description or '')|length > 90 %}…{% endif %}</div>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+              <div class="fw-bold">₹ {{ '%.2f'|format(p.price) }}</div>
+              <form method="post" action="{{ url_for('add_to_cart', product_id=p.id) }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-dark"><i class="bi bi-bag-plus me-1"></i>Add</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <nav class="mt-4" aria-label="Products pagination">
+      <ul class="pagination justify-content-center">
+        <li class="page-item {{ 'disabled' if page<=1 else '' }}">
+          <a class="page-link" href="{{ url_for('index', q=request.args.get('q'), sort=sort, page=page-1) }}" tabindex="-1">Prev</a>
+        </li>
+        {% for n in range(1, total_pages+1) %}
+          <li class="page-item {{ 'active' if n==page else '' }}"><a class="page-link" href="{{ url_for('index', q=request.args.get('q'), sort=sort, page=n) }}">{{ n }}</a></li>
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page>=total_pages else '' }}">
+          <a class="page-link" href="{{ url_for('index', q=request.args.get('q'), sort=sort, page=page+1) }}">Next</a>
+        </li>
+      </ul>
+    </nav>
+
+    {% else %}
+      <div class="alert alert-secondary">No products found.</div>
+    {% endif %}
   </div>
-</div>
-
-<style>
-  /* Kill any circular styling inside product grid */
-  #productGrid img,
-  #productGrid .product-img {
-    border-radius: 0 !important;
-    clip-path: none !important;
-    -webkit-clip-path: none !important;
-    mask-image: none !important;
-    -webkit-mask-image: none !important;
-  }
-
-  .object-cover { object-fit: cover; object-position: center; }
-  .product-thumb { border-radius: .5rem; }         /* rounded container, straight image */
-  .product-thumb img { border-radius: 0 !important; }
-
-  .hover-up { transition: transform .2s, box-shadow .2s; }
-  @media (min-width: 768px) {
-    .hover-up:hover { transform: translateY(-4px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important; }
-  }
-  .line-clamp {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  /* Social icon sizing/hover */
-  .social-icon { font-size: 2rem; line-height: 1; }
-  .social-icon:hover { opacity: .85; }
-</style>
-
-<script>
-  (function () {
-    const grid = document.getElementById('productGrid');
-    const search = document.getElementById('quickSearch');
-    const sort = document.getElementById('sortSelect');
-    const minPrice = document.getElementById('minPrice');
-    const maxPrice = document.getElementById('maxPrice');
-    const applyFilters = document.getElementById('applyFilters');
-
-    // Strip any leftover circle classes/styles
-    document.querySelectorAll('#productGrid img').forEach(img => {
-      img.classList.remove('rounded', 'rounded-circle', 'img-circle');
-      img.style.borderRadius = '0';
-      img.style.clipPath = 'none';
-      img.style.webkitClipPath = 'none';
-      img.style.maskImage = 'none';
-      img.style.webkitMaskImage = 'none';
-    });
-
-    function items() { return Array.from(grid.querySelectorAll('.product-card')); }
-
-    function applySearchFilter() {
-      const q = (search?.value || '').trim().toLowerCase();
-      items().forEach(card => {
-        const name = card.dataset.name || '';
-        card.style.display = name.includes(q) ? '' : 'none';
-      });
-    }
-
-    function applyPriceFilter() {
-      const min = parseFloat(minPrice?.value || 'NaN');
-      const max = parseFloat(maxPrice?.value || 'NaN');
-      items().forEach(card => {
-        const price = parseFloat(card.dataset.price || '0');
-        const okMin = isNaN(min) ? true : price >= min;
-        const okMax = isNaN(max) ? true : price <= max;
-        card.style.display = (okMin && okMax) ? '' : 'none';
-      });
-    }
-
-    function applySort() {
-      const cards = items();
-      const val = sort?.value || 'new';
-      const byPriceAsc = (a,b)=> parseFloat(a.dataset.price)-parseFloat(b.dataset.price);
-      const byPriceDesc= (a,b)=> parseFloat(b.dataset.price)-parseFloat(a.dataset.price);
-      const byNameAsc  = (a,b)=> (a.dataset.name||'').localeCompare(b.dataset.name||'');
-      const byNameDesc = (a,b)=> (b.dataset.name||'').localeCompare(a.dataset.name||'');
-
-      switch (val) {
-        case 'priceLow': cards.sort(byPriceAsc); break;
-        case 'priceHigh': cards.sort(byPriceDesc); break;
-        case 'nameAz': cards.sort(byNameAsc); break;
-        case 'nameZa': cards.sort(byNameDesc); break;
-        default: return; // keep server order
-      }
-      cards.forEach(c => grid.appendChild(c));
-    }
-
-    search?.addEventListener('input', applySearchFilter);
-    sort?.addEventListener('change', applySort);
-    applyFilters?.addEventListener('click', function () {
-      applyPriceFilter();
-      applySearchFilter();
-    });
-  })();
-</script>
-
+</section>
 {% endblock %}

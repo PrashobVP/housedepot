@@ -6,6 +6,7 @@
         <div class="card-body">
           <h4 class="mb-3">Admin Login</h4>
           <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
               <label class="form-label">Username</label>
               <input name="username" class="form-control" required>

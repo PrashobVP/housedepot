@@ -1,48 +1,67 @@
-# app.py — HouseDepot (separate MySQL params, no DATABASE_URL)
+# app.py — HouseDepot (Flask + MySQL)
 from datetime import datetime, timedelta
 from decimal import Decimal
-import os, random
-import re
+import os, random, re
 from urllib.parse import quote_plus
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.utils import secure_filename
+from PIL import Image
 
-# Load .env if present (optional).
+# Load .env (optional)
 load_dotenv(override=True)
 
 app = Flask(__name__)
 
-# -------- Core config (NO DATABASE_URL) --------
+# ---- Security: CSRF + rate limits + cookies ----
+csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=False,   # True on HTTPS
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024,  # 2 MB uploads
+)
+
+# ---- Core config (NO DATABASE_URL) ----
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret')
 
 DB_NAME = os.getenv('DATABASE')
 DB_HOST = os.getenv('HOST')
-DB_PORT = os.getenv('PORT')
+DB_PORT = os.getenv('PORT', '3306')
 DB_USER = os.getenv('USER')
-DB_PASS = os.getenv('PASSWORD')
+DB_PASS = os.getenv('PASSWORD', '')
 
-# URL-encode the password to handle special characters
-encoded_password = quote_plus(DB_PASS)
-
-# Build the MySQL URI from parts with the encoded password
+encoded_password = quote_plus(DB_PASS or "")
 DB_URI = f"mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-#print(f"Generated DB URI: {DB_URI}")
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# -------- Uploads --------
+# ---- Uploads ----
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'static/uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 ALLOWED_IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
 
-# -------- Gmail SMTP --------
+def is_image_safe(path):
+    try:
+        with Image.open(path) as im:
+            im.verify()
+        return True
+    except Exception:
+        return False
+
+# ---- Gmail SMTP ----
 def _bool(val, default=False):
     if val is None:
         return default
-    return str(val).strip().lower() in ('1', 'true', 'yes', 'on')
+    return str(val).strip().lower() in ('1','true','yes','on')
 
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
@@ -57,12 +76,12 @@ app.config['MAIL_DEBUG'] = app.debug
 mail = Mail(app)
 db = SQLAlchemy(app)
 
-# -------- Models --------
+# ---------------- Models ----------------
 class Product(db.Model):
     __tablename__ = 'products'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    price = db.Column(db.Numeric(10, 2), nullable=False)
+    price = db.Column(db.Numeric(10,2), nullable=False)
     image_url = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -85,11 +104,40 @@ class OtpToken(db.Model):
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# -------- Helpers --------
-def _ext_ok(filename: str) -> bool:
-    _, ext = os.path.splitext(filename.lower())
-    return ext in ALLOWED_IMAGE_EXTS
+# ---------------- Template globals ----------------
+@app.context_processor
+def inject_public_settings():
+    cart = session.get("cart")
+    if isinstance(cart, dict):
+        cart_count = sum(int(v) if str(v).isdigit() else 1 for v in cart.values())
+    elif isinstance(cart, list):
+        cart_count = len(cart)
+    else:
+        cart_count = 0
+    return {
+        "WHATSAPP_NUMBER": os.getenv("WHATSAPP_NUMBER", "91XXXXXXXXXX"),
+        "MAIL_SENDER": os.getenv("MAIL_DEFAULT_SENDER", ""),
+        "CART_COUNT": cart_count,
+    }
 
+# ---------------- Cart helpers ----------------
+def _get_cart():
+    c = session.get('cart')
+    if isinstance(c, dict):
+        return c
+    if isinstance(c, list):  # migrate old list -> dict with qty
+        d = {}
+        for pid in c:
+            d[str(pid)] = d.get(str(pid), 0) + 1
+        session['cart'] = d
+        return d
+    session['cart'] = {}
+    return session['cart']
+
+def _save_cart(c):
+    session['cart'] = c
+
+# ---------------- OTP helpers ----------------
 def send_otp_email(to_email: str, code: str):
     sender_email = app.config.get('MAIL_DEFAULT_SENDER') or app.config.get('MAIL_USERNAME')
     try:
@@ -104,22 +152,17 @@ def create_and_email_otp(admin: AdminUser):
     token = OtpToken(
         admin_user_id=admin.id,
         code=code,
-        expires_at=datetime.utcnow() + timedelta(minutes=10)
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
     )
     db.session.add(token)
     db.session.commit()
     send_otp_email(admin.email, code)
 
-# -------- First run: ensure tables and seed admin --------
+# ---------------- First run ----------------
 with app.app_context():
     db.create_all()
     if AdminUser.query.count() == 0:
-        admin_password = os.getenv('ADMIN_PASSWORD')
-        if not admin_password:
-            # Handle the case where ADMIN_PASSWORD is not set
-            print("Warning: ADMIN_PASSWORD environment variable not set. A default password 'adminpass' will be used.")
-            admin_password = 'adminpass'
-            
+        admin_password = os.getenv('ADMIN_PASSWORD') or 'adminpass'
         default_admin = AdminUser(
             username='admin',
             email=os.getenv('ADMIN_EMAIL', 'housedepot2@gmail.com'),
@@ -129,66 +172,96 @@ with app.app_context():
         db.session.add(default_admin)
         db.session.commit()
 
-# -------- Routes --------
+# ---------------- Routes ----------------
 @app.route('/')
 def index():
-    products = Product.query.order_by(Product.created_at.desc()).all()
-    return render_template('index.html', products=products, logo_url=url_for('static', filename='logo.jpg'))
+    q = (request.args.get('q') or '').strip()
+    sort = request.args.get('sort','newest')
+    page = max(int(request.args.get('page', 1)), 1)
+    size = 12
 
-@app.route('/add_to_cart/<int:product_id>')
+    query = Product.query
+    if q:
+        if q.isdigit():
+            query = query.filter((Product.name.ilike(f'%{q}%')) | (Product.id==int(q)))
+        else:
+            query = query.filter(Product.name.ilike(f'%{q}%'))
+
+    if sort == 'price-asc':
+        query = query.order_by(Product.price.asc(), Product.id.desc())
+    elif sort == 'price-desc':
+        query = query.order_by(Product.price.desc(), Product.id.desc())
+    else:
+        query = query.order_by(Product.created_at.desc()) if hasattr(Product, 'created_at') else query.order_by(Product.id.desc())
+
+    total = query.count()
+    products = query.offset((page-1)*size).limit(size).all()
+    total_pages = max((total + size - 1) // size, 1)
+
+    return render_template('index.html', products=products, page=page, total_pages=total_pages, sort=sort)
+
+# Add to cart (POST + GET)
+@app.route('/add_to_cart/<int:product_id>', methods=['POST','GET'])
 def add_to_cart(product_id):
-    cart = session.get('cart', [])
-    cart.append(product_id)
-    session['cart'] = cart
+    cart = _get_cart()
+    cart[str(product_id)] = int(cart.get(str(product_id), 0)) + 1
+    _save_cart(cart)
     flash('Product added to cart!', 'success')
-    return redirect(url_for('index'))
+    return redirect(request.referrer or url_for('index'))
+
+@app.route('/product/<int:pid>')
+def product_detail(pid):
+    p = Product.query.get_or_404(pid)
+    return render_template('product_detail.html', p=p)
 
 @app.route('/cart')
 def cart():
-    ids = session.get('cart', [])
-    items = Product.query.filter(Product.id.in_(ids)).all() if ids else []
-    total = sum([Decimal(p.price) for p in items]) if items else Decimal('0.00')
-    return render_template('cart.html', products=items, total=total)
+    c = _get_cart()
+    ids = [int(k) for k in c.keys()]
+    products = Product.query.filter(Product.id.in_(ids)).all() if ids else []
+    items, total = [], Decimal('0.00')
+    for p in products:
+        qty = int(c.get(str(p.id), 0))
+        sub = Decimal(p.price) * qty
+        total += sub
+        items.append({'product': p, 'qty': qty, 'subtotal': sub})
+    return render_template('cart.html', items=items, total=total)
 
+# WhatsApp checkout (POST only)
 @app.route('/checkout', methods=['POST'])
 def checkout():
-    ids = session.get('cart', [])
-    if not ids:
+    c = _get_cart()
+    if not c:
         flash('Your cart is empty.', 'warning')
         return redirect(url_for('cart'))
 
-    # Fetch items in cart
-    items = Product.query.filter(Product.id.in_(ids)).all()
-    if not items:
-        session.pop('cart', None)
+    ids = [int(k) for k in c.keys()]
+    products = Product.query.filter(Product.id.in_(ids)).all()
+    if not products:
+        session['cart'] = {}
         flash('Your cart is empty.', 'warning')
         return redirect(url_for('cart'))
 
-    # Build WhatsApp message with product list + total
-    lines = ["Hello, I would like to place an order for the items in my cart:", ""]
-    total = Decimal('0.00')
-    for i, p in enumerate(items, start=1):
-        total += Decimal(p.price)
-        price_str = f"₹{p.price:.2f}"
-        lines.append(f"{i}) {p.name} — {price_str}")
+    lines, total = ["Hello, I would like to place an order:", ""], Decimal('0.00')
+    for i, p in enumerate(products, start=1):
+        qty = int(c.get(str(p.id), 0))
+        sub = Decimal(p.price) * qty
+        total += sub
+        lines.append(f"{i}) [ID:{p.id}] {p.name} × {qty} = ₹{sub:.2f}")
     lines.append("")
     lines.append(f"Total amount: ₹{total:.2f}")
     wa_text = "\n".join(lines)
 
-    # Encode and build WA URL
-    wa_number = "916282526656"  # E.164 without plus sign
+    wa_number = os.getenv("WHATSAPP_NUMBER", "916282526656")
     wa_url = f"https://wa.me/{wa_number}?text={quote_plus(wa_text)}"
 
-    # Clear the cart and show success message
-    session.pop('cart', None)
+    session['cart'] = {}
     flash('Order initiated. Opening WhatsApp…', 'success')
-
-    # Render a lightweight page that auto-opens WhatsApp
-    return render_template('checkout_redirect.html', wa_url=wa_url)
-
+    return redirect(wa_url)
 
 # ---- Admin auth + OTP ----
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -204,6 +277,7 @@ def login():
     return render_template('login.html')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def verify_otp():
     pending_id = session.get('pending_admin_id')
     if not pending_id:
@@ -234,6 +308,7 @@ def verify_otp():
     return render_template('verify_otp.html')
 
 @app.route('/resend-otp', methods=['POST'])
+@limiter.limit("3 per minute")
 def resend_otp():
     pending_id = session.get('pending_admin_id')
     if not pending_id:
@@ -278,10 +353,16 @@ def add_product():
             flash('Invalid price.', 'danger')
             return render_template('add_product.html')
         image_url = ''
-        if image_file and image_file.filename and _ext_ok(image_file.filename):
-            save_path = os.path.join(app.config['UPLOAD_FOLDER'], image_file.filename)
+        if image_file and image_file.filename and os.path.splitext(image_file.filename.lower())[1] in ALLOWED_IMAGE_EXTS:
+            fname = secure_filename(image_file.filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
             image_file.save(save_path)
-            image_url = f'static/uploads/{image_file.filename}'
+            if not is_image_safe(save_path):
+                os.remove(save_path)
+                flash('Invalid image file.', 'danger')
+                return render_template('add_product.html')
+            image_url = f'static/uploads/{fname}'
         new_p = Product(name=name, price=price, description=description, image_url=image_url or 'static/uploads/placeholder.png')
         db.session.add(new_p)
         db.session.commit()
@@ -296,18 +377,23 @@ def edit_product(pid):
     p = Product.query.get_or_404(pid)
     if request.method == 'POST':
         p.name = request.form['name']
-        price_raw = request.form['price']
         try:
-            p.price = Decimal(price_raw)
+            p.price = Decimal(request.form['price'])
         except Exception:
             flash('Invalid price.', 'danger')
             return render_template('edit_product.html', product=p)
         p.description = request.form.get('description')
         image_file = request.files.get('image')
-        if image_file and image_file.filename and _ext_ok(image_file.filename):
-            save_path = os.path.join(app.config['UPLOAD_FOLDER'], image_file.filename)
+        if image_file and image_file.filename and os.path.splitext(image_file.filename.lower())[1] in ALLOWED_IMAGE_EXTS:
+            fname = secure_filename(image_file.filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
             image_file.save(save_path)
-            p.image_url = f'static/uploads/{image_file.filename}'
+            if not is_image_safe(save_path):
+                os.remove(save_path)
+                flash('Invalid image file.', 'danger')
+                return render_template('edit_product.html', product=p)
+            p.image_url = f'static/uploads/{fname}'
         db.session.commit()
         flash('Product updated.', 'success')
         return redirect(url_for('admin_dashboard'))
@@ -367,7 +453,7 @@ def contact():
 
     return render_template('contact.html')
 
-# Optional: test Gmail quickly
+# ---- Optional quick SMTP test
 @app.route('/admin/test-email')
 def admin_test_email():
     if not require_admin():
@@ -382,6 +468,29 @@ def admin_test_email():
     except Exception as e:
         flash(f'Failed to send test email: {e}', 'danger')
     return redirect(url_for('admin_dashboard'))
+
+# ---- Security headers & favicon
+@app.after_request
+def add_secure_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options','nosniff')
+    resp.headers.setdefault('X-Frame-Options','DENY')
+    resp.headers.setdefault('Referrer-Policy','no-referrer-when-downgrade')
+    resp.headers.setdefault('Permissions-Policy','geolocation=(), microphone=()')
+    return resp
+
+@app.route('/favicon.ico')
+def favicon():
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+# ---- Error pages
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_err(e):
+    return render_template('500.html'), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
